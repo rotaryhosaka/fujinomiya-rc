@@ -1,107 +1,180 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
-  <title>富士宮RC 出欠回答</title>
-  <script src="https://static.line-scdn.net/liff/2.21.1/sdk.js"></script>
-  <style>
-    body { font-family: sans-serif; margin: 20px; background-color: #f0f0f0; }
-    .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
-    h1 { color: #00B900; text-align: center; margin-bottom: 20px; }
-    label { display: block; margin-bottom: 5px; font-weight: bold; }
-    input[type="text"], textarea, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
-    .radio-group label { display: inline-block; margin-right: 15px; font-weight: normal; }
-    button { background-color: #00B900; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
-    button:hover { background-color: #009900; }
-    #status { margin-top: 15px; text-align: center; color: red; }
-  </style>
+    <title>出欠回答フォーム</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
+    <script src="https://static.line-scdn.net/liff/sdk/2.2.0/liff.js"></script>
+    <style>
+        body { padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .field:not(:last-child) { margin-bottom: 1rem; }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>富士宮RC 出欠回答</h1>
-    <form id="attendanceForm">
-      <label for="name">お名前:</label>
-      <input type="text" id="name" name="name" placeholder="例: 山田 太郎" required>
+    <div class="container">
+        <h1 class="title has-text-centered">出欠回答フォーム</h1>
+        <form id="attendanceForm">
+            <div class="field">
+                <label class="label">お名前</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select id="memberSelect" required>
+                            <option value="">選択してください</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
 
-      <label for="attendance">出欠:</label>
-      <select id="attendance" name="attendance" required>
-        <option value="">選択してください</option>
-        <option value="出席">出席</option>
-        <option value="欠席">欠席</option>
-        <option value="メークアップ">メークアップ</option>
-      </select>
+            <div class="field">
+                <label class="label">例会</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select id="eventSelect" required>
+                            <option value="">選択してください</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
 
-      <label for="comment">コメント (任意):</label>
-      <textarea id="comment" name="comment" rows="3" placeholder="連絡事項など"></textarea>
+            <div class="field">
+                <label class="label">出欠</label>
+                <div class="control">
+                    <label class="radio">
+                        <input type="radio" name="attendance" value="出席" required> 出席
+                    </label>
+                    <label class="radio">
+                        <input type="radio" name="attendance" value="欠席"> 欠席
+                    </label>
+                </div>
+            </div>
 
-      <button type="submit">送信</button>
-      <div id="status"></div>
-    </form>
-  </div>
+            <div class="field">
+                <label class="label">コメント (任意)</label>
+                <div class="control">
+                    <textarea class="textarea" id="comment" placeholder="コメントがあれば入力してください"></textarea>
+                </div>
+            </div>
 
-  <script>
-    async function initializeLiff() {
-      await liff.init({
-        liffId: "YOUR_LIFF_ID" // ここにLIFF IDを貼り付けます
-      });
-      if (!liff.isLoggedIn()) {
-        liff.login();
-      }
-    }
+            <div class="field is-grouped is-grouped-centered">
+                <div class="control">
+                    <button type="submit" class="button is-primary">送信</button>
+                </div>
+            </div>
+        </form>
+        <div id="responseMessage" class="notification is-hidden"></div>
+    </div>
 
-    document.addEventListener('DOMContentLoaded', function() {
-      initializeLiff();
+    <script>
+        const LIFF_ID = '2010278029-OUdZ7T31'; // 正しいLIFF IDを設定
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbza-3lFkkI0NZNBH7cXcocoAh4dAaFDCfVesmMZfY9cc54lUwERv4RZLgkeQ5JbH43p/exec'; // 新しいGASウェブアプリのURLを設定
 
-      document.getElementById('attendanceForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-
-        const name = document.getElementById('name').value;
-        const attendance = document.getElementById('attendance').value;
-        const comment = document.getElementById('comment').value;
-        const statusDiv = document.getElementById('status');
-
-        if (!name || !attendance) {
-          statusDiv.textContent = 'お名前と出欠は必須項目です。';
-          return;
+        async function initializeLiff() {
+            try {
+                await liff.init({
+                    liffId: LIFF_ID
+                });
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                } else {
+                    await fetchMasterData();
+                }
+            } catch (err) {
+                console.error('LIFF initialization failed', err);
+                document.getElementById('responseMessage').textContent = 'LIFFの初期化に失敗しました。';
+                document.getElementById('responseMessage').classList.remove('is-hidden', 'is-success', 'is-danger');
+                document.getElementById('responseMessage').classList.add('is-warning');
+            }
         }
 
-        statusDiv.textContent = '送信中...';
+        async function fetchMasterData() {
+            try {
+                const response = await fetch(`${GAS_WEB_APP_URL}?action=getMasterData`);
+                const data = await response.json();
 
-        try {
-          const idToken = liff.getIDToken();
-          const profile = await liff.getProfile();
-          const userId = profile.userId;
+                const memberSelect = document.getElementById('memberSelect');
+                data.members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.memberId;
+                    option.textContent = member.memberName;
+                    memberSelect.appendChild(option);
+                });
 
-          const gasUrl = "YOUR_GAS_WEB_APP_URL"; // ここにGASのウェブアプリURLを貼り付けます
-          const response = await fetch(gasUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: new URLSearchParams({
-              userId: userId,
-              name: name,
-              attendance: attendance,
-              comment: comment,
-              idToken: idToken // ユーザー認証情報も送信
-            })
-          });
+                const eventSelect = document.getElementById('eventSelect');
+                data.events.forEach(event => {
+                    const option = document.createElement('option');
+                    option.value = event.eventId;
+                    option.textContent = `${event.eventDate} ${event.eventName}`;
+                    eventSelect.appendChild(option);
+                });
 
-          const result = await response.json();
-          if (result.status === 'success') {
-            statusDiv.textContent = '出欠情報を送信しました！';
-            alert('出欠情報を送信しました！');
-            liff.closeWindow();
-          } else {
-            statusDiv.textContent = '送信に失敗しました: ' + result.message;
-          }
-        } catch (error) {
-          console.error('Error:', error);
-          statusDiv.textContent = 'エラーが発生しました。もう一度お試しください。';
+            } catch (error) {
+                console.error('Failed to fetch master data', error);
+                document.getElementById('responseMessage').textContent = 'マスターデータの取得に失敗しました。';
+                document.getElementById('responseMessage').classList.remove('is-hidden', 'is-success', 'is-danger');
+                document.getElementById('responseMessage').classList.add('is-danger');
+            }
         }
-      });
-    });
-  </script>
+
+        document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const memberSelect = document.getElementById('memberSelect');
+            const eventSelect = document.getElementById('eventSelect');
+            const attendance = document.querySelector('input[name="attendance"]:checked');
+            const comment = document.getElementById('comment');
+            const responseMessage = document.getElementById('responseMessage');
+
+            if (!memberSelect.value || !eventSelect.value || !attendance) {
+                responseMessage.textContent = '全ての必須項目を入力してください。';
+                responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
+                responseMessage.classList.add('is-danger');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'recordAttendance');
+            formData.append('userId', liff.getContext().userId);
+            formData.append('memberId', memberSelect.value);
+            formData.append('memberName', memberSelect.options[memberSelect.selectedIndex].textContent);
+            formData.append('eventId', eventSelect.value);
+            formData.append('eventName', eventSelect.options[eventSelect.selectedIndex].textContent);
+            formData.append('attendance', attendance.value);
+            formData.append('comment', comment.value);
+            formData.append('idToken', liff.getIDToken());
+
+            try {
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    responseMessage.textContent = '出欠回答を送信しました。';
+                    responseMessage.classList.remove('is-hidden', 'is-danger', 'is-warning');
+                    responseMessage.classList.add('is-success');
+                    liff.sendMessages([{
+                        type: 'text',
+                        text: `出欠情報を記録しました：\n例会：${eventSelect.options[eventSelect.selectedIndex].textContent}\n氏名：${memberSelect.options[memberSelect.selectedIndex].textContent}\n出欠：${attendance.value}`
+                    }]).then(() => {
+                        liff.closeWindow();
+                    });
+                } else {
+                    responseMessage.textContent = `送信に失敗しました: ${result.message}`;
+                    responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
+                    responseMessage.classList.add('is-danger');
+                }
+            } catch (error) {
+                console.error('Error submitting form', error);
+                responseMessage.textContent = 'フォームの送信中にエラーが発生しました。';
+                responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
+                responseMessage.classList.add('is-danger');
+            }
+        });
+
+        initializeLiff();
+    </script>
 </body>
 </html>
