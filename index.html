@@ -7,43 +7,47 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
     <script src="https://static.line-scdn.net/liff/sdk/2.2.0/liff.js"></script>
     <style>
-        body { padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .field:not(:last-child ) { margin-bottom: 1rem; }
+        body { padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .field:not(:last-child) { margin-bottom: 1rem; }
+        .title { color: #00B900; }
+        #loadingMessage { text-align: center; color: #888; padding: 20px 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1 class="title has-text-centered">出欠回答フォーム</h1>
-        <form id="attendanceForm">
+        <p id="loadingMessage">データを読み込み中...</p>
+        <form id="attendanceForm" style="display:none;">
             <div class="field">
-                <label class="label">お名前</label>
+                <label class="label">お名前 <span class="has-text-danger">*</span></label>
                 <div class="control">
                     <div class="select is-fullwidth">
                         <select id="memberSelect" required>
-                            <option value="">データを読み込み中...</option>
+                            <option value="">選択してください</option>
                         </select>
                     </div>
                 </div>
             </div>
 
             <div class="field">
-                <label class="label">例会</label>
+                <label class="label">例会 <span class="has-text-danger">*</span></label>
                 <div class="control">
                     <div class="select is-fullwidth">
                         <select id="eventSelect" required>
-                            <option value="">データを読み込み中...</option>
+                            <option value="">選択してください</option>
                         </select>
                     </div>
                 </div>
             </div>
 
             <div class="field">
-                <label class="label">出欠</label>
+                <label class="label">出欠 <span class="has-text-danger">*</span></label>
                 <div class="control">
                     <label class="radio">
                         <input type="radio" name="attendance" value="出席" required> 出席
                     </label>
+                    &nbsp;&nbsp;
                     <label class="radio">
                         <input type="radio" name="attendance" value="欠席"> 欠席
                     </label>
@@ -51,7 +55,7 @@
             </div>
 
             <div class="field">
-                <label class="label">コメント (任意)</label>
+                <label class="label">コメント（任意）</label>
                 <div class="control">
                     <textarea class="textarea" id="comment" placeholder="コメントがあれば入力してください"></textarea>
                 </div>
@@ -59,43 +63,43 @@
 
             <div class="field is-grouped is-grouped-centered">
                 <div class="control">
-                    <button type="submit" class="button is-primary">送信</button>
+                    <button type="submit" class="button is-success is-medium" id="submitBtn">送信する</button>
                 </div>
             </div>
         </form>
-        <div id="responseMessage" class="notification is-hidden"></div>
+        <div id="responseMessage" class="notification is-hidden" style="margin-top:1rem;"></div>
     </div>
 
     <script>
-        const LIFF_ID = '2010278029-OUdZ7T31'; // 正しいLIFF ID
-        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbza-3lFkkI0NZNBH7cXcocoAh4dAaFDCfVesmMZfY9cc54lUwERv4RZLgkeQ5JbH43p/exec'; // 新しいGASウェブアプリのURL
+        const LIFF_ID = '2010278029-OUdZ7T31';
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbza-3lFkkI0NZNBH7cXcocoAh4dAaFDCfVesmMZfY9cc54lUwERv4RZLgkeQ5JbH43p/exec';
 
-        async function initializeLiff( ) {
-            // まず先にスプレッドシートからマスターデータを取得して表示する
+        let lineUserId = 'browser_user';
+        let lineIdToken = '';
+
+        // ページ読み込み時に最初にマスターデータを取得する（LINEログインを待たない）
+        window.addEventListener('DOMContentLoaded', async () => {
+            // まずマスターデータを取得してフォームを表示
             await fetchMasterData();
-
-            try {
-                await liff.init({
-                    liffId: LIFF_ID
-                });
-                console.log('LIFF initialized successfully');
-                if (!liff.isLoggedIn()) {
-                    // LINEアプリ外で開かれた場合は、ログインを促すか、あるいはそのまま入力を許可する
-                    console.log('User is not logged in to LINE');
-                }
-            } catch (err) {
-                console.error('LIFF initialization failed', err);
-                // LINE外ブラウザでの表示用：警告はコンソールにのみ出し、画面には表示しない（ユーザーの混乱を防ぐため）
-            }
-        }
+            // その後、バックグラウンドでLIFF初期化（ユーザーIDの取得）
+            initializeLiff();
+        });
 
         async function fetchMasterData() {
+            const loadingMsg = document.getElementById('loadingMessage');
+            const form = document.getElementById('attendanceForm');
             try {
                 const response = await fetch(`${GAS_WEB_APP_URL}?action=getMasterData`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
                 const data = await response.json();
 
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'データ取得に失敗しました');
+                }
+
                 const memberSelect = document.getElementById('memberSelect');
-                memberSelect.innerHTML = '<option value="">選択してください</option>';
                 data.members.forEach(member => {
                     const option = document.createElement('option');
                     option.value = member.memberId;
@@ -104,7 +108,6 @@
                 });
 
                 const eventSelect = document.getElementById('eventSelect');
-                eventSelect.innerHTML = '<option value="">選択してください</option>';
                 data.events.forEach(event => {
                     const option = document.createElement('option');
                     option.value = event.eventId;
@@ -112,11 +115,30 @@
                     eventSelect.appendChild(option);
                 });
 
+                loadingMsg.style.display = 'none';
+                form.style.display = 'block';
+
             } catch (error) {
                 console.error('Failed to fetch master data', error);
-                document.getElementById('responseMessage').textContent = 'マスターデータの取得に失敗しました。インターネット接続やGASの設定を確認してください。';
-                document.getElementById('responseMessage').classList.remove('is-hidden', 'is-success', 'is-warning');
-                document.getElementById('responseMessage').classList.add('is-danger');
+                loadingMsg.textContent = 'データの読み込みに失敗しました。ページを再読み込みしてください。';
+                loadingMsg.style.color = '#cc0000';
+            }
+        }
+
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile();
+                    lineUserId = profile.userId;
+                    lineIdToken = liff.getIDToken() || '';
+                } else {
+                    // LINEアプリ外（PCブラウザなど）の場合はログインを促さず、そのまま使用可能
+                    console.log('LIFF: not logged in (external browser)');
+                }
+            } catch (err) {
+                console.warn('LIFF initialization failed (non-LINE browser):', err);
+                // LINEアプリ外でのエラーは無視してフォームを使えるようにする
             }
         }
 
@@ -128,36 +150,28 @@
             const attendance = document.querySelector('input[name="attendance"]:checked');
             const comment = document.getElementById('comment');
             const responseMessage = document.getElementById('responseMessage');
+            const submitBtn = document.getElementById('submitBtn');
 
             if (!memberSelect.value || !eventSelect.value || !attendance) {
-                responseMessage.textContent = '全ての必須項目を入力してください。';
+                responseMessage.textContent = '全ての必須項目を選択してください。';
                 responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
                 responseMessage.classList.add('is-danger');
                 return;
             }
 
-            // LINEのユーザーIDを取得（LINE外ブラウザの場合は 'browser_user' とする）
-            let userId = 'browser_user';
-            let idToken = '';
-            try {
-                if (liff.isLoggedIn()) {
-                    userId = liff.getContext().userId;
-                    idToken = liff.getIDToken();
-                }
-            } catch (err) {
-                console.log('Not in LIFF environment');
-            }
+            submitBtn.disabled = true;
+            submitBtn.textContent = '送信中...';
 
             const formData = new FormData();
             formData.append('action', 'recordAttendance');
-            formData.append('userId', userId);
+            formData.append('userId', lineUserId);
             formData.append('memberId', memberSelect.value);
             formData.append('memberName', memberSelect.options[memberSelect.selectedIndex].textContent);
             formData.append('eventId', eventSelect.value);
             formData.append('eventName', eventSelect.options[eventSelect.selectedIndex].textContent);
             formData.append('attendance', attendance.value);
             formData.append('comment', comment.value);
-            formData.append('idToken', idToken);
+            formData.append('idToken', lineIdToken);
 
             try {
                 const response = await fetch(GAS_WEB_APP_URL, {
@@ -167,36 +181,39 @@
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    responseMessage.textContent = '出欠回答を送信しました。';
+                    responseMessage.textContent = '出欠回答を送信しました！';
                     responseMessage.classList.remove('is-hidden', 'is-danger', 'is-warning');
                     responseMessage.classList.add('is-success');
 
-                    // LINE内であればメッセージを送信して閉じる
+                    // LINEアプリ内の場合はメッセージ送信してウィンドウを閉じる
                     try {
                         if (liff.isInClient()) {
                             await liff.sendMessages([{
                                 type: 'text',
                                 text: `出欠情報を記録しました：\n例会：${eventSelect.options[eventSelect.selectedIndex].textContent}\n氏名：${memberSelect.options[memberSelect.selectedIndex].textContent}\n出欠：${attendance.value}`
                             }]);
-                            liff.closeWindow();
+                            setTimeout(() => liff.closeWindow(), 1500);
                         }
-                    } catch (lineErr) {
-                        console.error('Failed to send LINE message', lineErr);
+                    } catch (msgErr) {
+                        console.warn('sendMessages failed:', msgErr);
+                        // メッセージ送信失敗でもフォーム送信は成功とする
                     }
                 } else {
                     responseMessage.textContent = `送信に失敗しました: ${result.message}`;
                     responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
                     responseMessage.classList.add('is-danger');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '送信する';
                 }
             } catch (error) {
                 console.error('Error submitting form', error);
-                responseMessage.textContent = 'フォームの送信中にエラーが発生しました。';
+                responseMessage.textContent = 'フォームの送信中にエラーが発生しました。もう一度お試しください。';
                 responseMessage.classList.remove('is-hidden', 'is-success', 'is-warning');
                 responseMessage.classList.add('is-danger');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '送信する';
             }
         });
-
-        initializeLiff();
     </script>
 </body>
 </html>
